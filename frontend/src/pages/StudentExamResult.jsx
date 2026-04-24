@@ -26,17 +26,11 @@ export default function StudentExamResult() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  /* =========================
-     FETCH RESULT
-  ========================= */
   useEffect(() => {
     const fetchResult = async () => {
       try {
         setLoading(true);
 
-        /* =========================
-           1️⃣ PRACTICE RESULT (localStorage)
-        ========================= */
         const practiceKey = `practice_result_${examId}`;
         const practiceResult = localStorage.getItem(practiceKey);
 
@@ -47,18 +41,10 @@ export default function StudentExamResult() {
           return;
         }
 
-        /* =========================
-           2️⃣ RESULT FROM NAVIGATION STATE
-        ========================= */
-      if (state) {
-  setResult(state); // temporary result
-}
+        if (state) {
+          setResult(state);
+        }
 
-/* fetch latest result for updated rank */
-
-        /* =========================
-           3️⃣ LIVE / TIMED RESULT (DB)
-        ========================= */
         const res = await api.get(`/exam/result/me/${examId}`);
 
         if (res.data?.success === false) {
@@ -71,13 +57,7 @@ export default function StudentExamResult() {
           setError("Unexpected response from server");
         }
       } catch (err) {
-        if (err.response?.status === 404) {
-          setError("You haven't attempted this exam yet.");
-        } else if (err.response?.status === 403) {
-          setError("Access denied. Please login again.");
-        } else {
-          setError("Failed to load result. Try again.");
-        }
+        setError("Failed to load result. Try again.");
       } finally {
         setLoading(false);
       }
@@ -86,39 +66,32 @@ export default function StudentExamResult() {
     fetchResult();
   }, [examId, state]);
 
-  /* =========================
-     LOADING
-  ========================= */
+  const percentage = result?.total
+    ? Math.round((result.score / result.total) * 100)
+    : 0;
+
   if (loading) {
     return (
-      <Container sx={{ py: 4, textAlign: "center" }}>
-        <CircularProgress />
+      <Container sx={{ py: 6, textAlign: "center" }}>
+        <CircularProgress size={50} />
         <Typography mt={2}>Loading your result...</Typography>
       </Container>
     );
   }
 
-  /* =========================
-     ERROR
-  ========================= */
   if (error) {
     return (
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-        <Button onClick={() => navigate("/")} variant="contained">
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Alert severity="error">{error}</Alert>
+        <Button sx={{ mt: 3 }} variant="contained" onClick={() => navigate("/")}>
           Back to Dashboard
         </Button>
       </Container>
     );
   }
 
-  /* =========================
-     RESULT VIEW
-  ========================= */
   return (
-    <Container maxWidth="sm" sx={{ py: 4 }}>
+    <Container maxWidth="sm" sx={{ py: 6 }}>
       <Button
         startIcon={<BackIcon />}
         onClick={() => navigate(-1)}
@@ -126,29 +99,77 @@ export default function StudentExamResult() {
         size="small"
         sx={{ mb: 3 }}
       >
-        BACK
+        Back
       </Button>
 
-      <Paper sx={{ p: 4, textAlign: "center" }}>
-        <Typography variant="h4" fontWeight="bold" mb={3}>
+      <Paper
+        elevation={4}
+        sx={{
+          p: 4,
+          borderRadius: 4,
+          textAlign: "center",
+        }}
+      >
+        {/* Title */}
+        <Typography variant="h5" fontWeight="bold" mb={3}>
           {result.exam?.title || "Exam Result"}
         </Typography>
 
-        <Typography variant="h2" color="primary">
-          {result.percentage}%
-        </Typography>
+        {/* Circular Percentage */}
+        <Box
+          sx={{
+            position: "relative",
+            display: "inline-flex",
+            mb: 3,
+          }}
+        >
+          <CircularProgress
+            variant="determinate"
+            value={percentage}
+            size={140}
+            thickness={5}
+          />
+          <Box
+            sx={{
+              top: 0,
+              left: 0,
+              bottom: 0,
+              right: 0,
+              position: "absolute",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Typography variant="h4" fontWeight="bold">
+              {percentage}%
+            </Typography>
+          </Box>
+        </Box>
 
-        <Chip
-          label={result.status}
-          color={result.status === "PASS" ? "success" : "error"}
-          sx={{ mt: 2, mb: 3 }}
-        />
+        {/* Status */}
+        {/* Status */}
+<Chip
+  label={result.status}
+  color={
+    result.practice
+      ? "default"
+      : result.status === "PASS"
+      ? "success"
+      : "error"
+  }
+  sx={{ mb: 3, fontWeight: "bold" }}
+/>
 
-        <Card variant="outlined">
+        {/* Details Card */}
+        <Card
+          variant="outlined"
+          sx={{ borderRadius: 3, textAlign: "left" }}
+        >
           <CardContent>
             <Stack spacing={2}>
               <Box display="flex" justifyContent="space-between">
-                <Typography>Score</Typography>
+                <Typography color="text.secondary">Score</Typography>
                 <Typography fontWeight="bold">
                   {result.score}/{result.total}
                 </Typography>
@@ -157,7 +178,7 @@ export default function StudentExamResult() {
               <Divider />
 
               <Box display="flex" justifyContent="space-between">
-                <Typography>Attempted On</Typography>
+                <Typography color="text.secondary">Attempted On</Typography>
                 <Typography>
                   {new Date(
                     result.submittedAt || result.attemptedAt || Date.now()
@@ -169,7 +190,7 @@ export default function StudentExamResult() {
                 <>
                   <Divider />
                   <Box display="flex" justifyContent="space-between">
-                    <Typography>Rank</Typography>
+                    <Typography color="text.secondary">Rank</Typography>
                     <Chip label={`#${result.rank}`} color="primary" />
                   </Box>
                 </>
@@ -178,14 +199,19 @@ export default function StudentExamResult() {
           </CardContent>
         </Card>
 
+        {/* Practice Info */}
         {result.practice && (
           <Alert severity="info" sx={{ mt: 3 }}>
             Practice Exam – Result not saved in database
           </Alert>
         )}
+
+        {/* Button */}
         <Button
+          fullWidth
           variant="contained"
-          sx={{ mt: 4 }}
+          size="large"
+          sx={{ mt: 4, borderRadius: 3 }}
           onClick={() => navigate("/")}
         >
           Back to Dashboard
