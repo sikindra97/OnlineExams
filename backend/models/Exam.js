@@ -6,13 +6,11 @@ title: String,
 
 description: String,
 
-// ✅ SUBJECT (MISSING)
 subject: {
 type: String,
 required: true
 },
 
-// ✅ NUMBER OF QUESTIONS (MISSING)
 numberOfQuestions: {
 type: Number,
 required: true
