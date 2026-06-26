@@ -1,70 +1,250 @@
 const router = require("express").Router();
-
-const Question = require("../models/Question");
-
 const auth = require("../middleware/authMiddleware");
-const role = require("../middleware/roleMiddleware");
+const Exam = require("../models/Exam");
+const Result = require("../models/Result");
 
-// create exams
+// get all my results- student 
+router.get("/my-results", auth, async (req, res) => {
+  try {
+    console.log(" Fetching results for user:", req.user.id);
+    
+    if (req.user.role !== "student") {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied. Students only." 
+      });
+    }
 
-router.post("/", auth, role("teacher","admin"), async (req,res)=>{
-  try{
+    const results = await Result.find({
+      student: req.user.id,
+      practice: false,
+    })
+      .populate("exam", "title examType description")
+      .sort({ createdAt: -1 });
 
-    const {
-      questionText,
-      options,
-      correctAnswer,
-      subject,
-      difficulty
-    } = req.body;
+    console.log(" Found", results.length, "results for student");
 
-    const question = await Question.create({
-      questionText,
-      options,
-      correctAnswer: Number(correctAnswer) - 1,
-      subject,
-      difficulty,
-      createdBy:req.user.id
+    res.json({
+      success: true,
+      data: results.map(r => ({
+        _id: r._id,
+        exam: r.exam,
+        score: r.score,
+        total: r.total,
+        percentage: r.percentage,
+        status: r.status,
+        submittedAt: r.submittedAt || r.createdAt,
+      }))
     });
-
-    res.status(201).json(question);
-
-  }catch(err){
-    console.error(err);
-    res.status(500).json({message:"Failed to create question"});
+  } catch (err) {
+    console.error(" Error fetching results:", err);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to load result history" 
+    });
   }
 });
 
-// get all questions 
+// student : get specif exam result 
+router.get("/exam/result/me/:examId", auth, async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const userId = req.user.id;
 
-router.get("/", auth, async(req,res)=>{
-try{
+    // Validate user is student
+    if (req.user.role !== "student") {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Only students can access this endpoint" 
+      });
+    }
 
-const questions = await Question.find()
-.populate("createdBy","name email")
-.sort({createdAt:-1});
+    // Validate examId format
+    if (!examId || examId.length !== 24) {
+      console.log(" Invalid exam ID format");
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid exam ID format" 
+      });
+    }
 
-res.json(questions);
+    console.log(" Searching for result...");
+    
+    // Find the student's result
+    const result = await Result.findOne({
+      exam: examId,
+      student: userId,
+      practice: false,
+    }).populate("exam", "title examType description");
 
-}catch(err){
-res.status(500).json({message:"Failed to fetch questions"});
-}
+
+
+    if (!result) {
+      console.log(" No result found");
+      
+      // Check if exam exists
+      const exam = await Exam.findById(examId).select("title");
+      console.log(" Exam exists:", exam ? "Yes" : "No");
+      
+      return res.status(404).json({ 
+        success: false,
+        message: exam 
+          ? "You haven't attempted this exam yet." 
+          : "Exam not found."
+      });
+    }
+
+    console.log(" Result found!");
+    
+    // Calculate rank
+    const totalStudents = await Result.countDocuments({ 
+      exam: examId, 
+      practice: false 
+    });
+    
+    const betterThan = await Result.countDocuments({ 
+      exam: examId, 
+      practice: false,
+      percentage: { $gt: result.percentage } 
+    });
+    
+    const rank = betterThan + 1;
+
+    // Prepare response
+    const responseData = {
+      success: true,
+      data: {
+        _id: result._id,
+        exam: result.exam,
+        score: result.score,
+        total: result.total,
+        percentage: result.percentage,
+        status: result.status,
+        submittedAt: result.submittedAt || result.createdAt,
+        createdAt: result.createdAt,
+        rank: rank,
+        totalStudents: totalStudents,
+      }
+    };
+
+    console.log("📤 Sending response");
+    res.json(responseData);
+    
+  } catch (error) {
+    console.error(" ERROR:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Server error while fetching result",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
+//  teacher/admin: get all resultx for exam 
 
-// delete questions 
+router.get("/exam/results/:examId", auth, async (req, res) => {
+  try {
+    // Check permissions
+    if (req.user.role !== "teacher" && req.user.role !== "admin") {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied. Teachers/admins only." 
+      });
+    }
 
-router.delete("/:id", auth, role("teacher","admin"), async(req,res)=>{
-try{
+    const { examId } = req.params;
 
-await Question.findByIdAndDelete(req.params.id);
+    // Get exam details
+    const exam = await Exam.findById(examId).select("title description");
+    if (!exam) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Exam not found" 
+      });
+    }
 
-res.json({message:"Question deleted"});
+    console.log(" Fetching results for exam:", exam.title);
+    
+    // Get all results
+    const results = await Result.find({ 
+      exam: examId,
+      practice: false 
+    })
+      .populate("student", "name email")
+      .sort({ percentage: -1, createdAt: 1 });
 
-}catch(err){
-res.status(500).json({message:"Delete failed"});
-}
+    // Add ranking
+    const rankedResults = results.map((result, index) => ({
+      ...result.toObject(),
+      rank: index + 1,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        examTitle: exam.title,
+        examDescription: exam.description,
+        results: rankedResults,
+        total: results.length,
+        average: results.length > 0 
+          ? (results.reduce((sum, r) => sum + r.percentage, 0) / results.length).toFixed(2)
+          : 0
+      }
+    });
+
+  } catch (error) {
+    console.error(" ERROR:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
+    });
+  }
 });
 
+// teacher/ admin : get live result 
+router.get("/exam/results/live/:examId", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "teacher" && req.user.role !== "admin") {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied. Teachers/admins only." 
+      });
+    }
+
+    const { examId } = req.params;
+
+    const results = await Result.find({ 
+      exam: examId,
+      practice: false 
+    })
+      .populate("student", "name email")
+      .sort({ percentage: -1 });
+
+    res.json({
+      success: true,
+      data: results.map((r, i) => ({
+        ...r.toObject(),
+        rank: i + 1,
+      }))
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// test endpoint
+router.get("/test", auth, (req, res) => {
+  res.json({
+    success: true,
+    message: "Result API is working!",
+    user: {
+      id: req.user.id,
+      role: req.user.role,
+      email: req.user.email
+    },
+    timestamp: new Date().toISOString()
+  });
+});
 
 module.exports = router;
