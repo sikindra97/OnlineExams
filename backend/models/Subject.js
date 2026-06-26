@@ -7,5 +7,4 @@ const subjectSchema = new mongoose.Schema({
     unique: true
   }
 });
-
 module.exports = mongoose.model("Subject", subjectSchema);
