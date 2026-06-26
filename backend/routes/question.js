@@ -5,9 +5,7 @@ const Question = require("../models/Question");
 const auth = require("../middleware/authMiddleware");
 const role = require("../middleware/roleMiddleware");
 
-/* =========================
-   CREATE QUESTION
-========================= */
+// create exams
 
 router.post("/", auth, role("teacher","admin"), async (req,res)=>{
   try{
@@ -37,9 +35,7 @@ router.post("/", auth, role("teacher","admin"), async (req,res)=>{
   }
 });
 
-/* =========================
-   GET ALL QUESTIONS
-========================= */
+// get all questions 
 
 router.get("/", auth, async(req,res)=>{
 try{
@@ -56,9 +52,7 @@ res.status(500).json({message:"Failed to fetch questions"});
 });
 
 
-/* =========================
-   DELETE QUESTION
-========================= */
+// delete questions 
 
 router.delete("/:id", auth, role("teacher","admin"), async(req,res)=>{
 try{
