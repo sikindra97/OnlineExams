@@ -28,7 +28,7 @@ mongoose
 
  // health check 
     app.get("/", (req, res) => {
-      res.send("Backend running 🚀");
+      res.send("Backend running ");
     });
 
 // server
